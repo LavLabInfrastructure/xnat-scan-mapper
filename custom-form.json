@@ -7,7 +7,9 @@
       "key": "scanMapBundle_mapped_sessions",
       "type": "hidden",
       "input": true,
-      "defaultValue": true
+      "defaultValue": true,
+      "persistent": true,
+      "clearOnHide": false
     },
     {
       "key": "t1ScanNumber",

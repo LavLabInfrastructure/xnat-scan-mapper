@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Create a named zip from files in NIFTI resources selected by a scan-map form."""
 import argparse
+import json
 import os
 import shutil
 import sys
@@ -49,7 +50,7 @@ def iter_custom_fields(payload):
     """Yield custom field name/value pairs from flat or record-based XNAT JSON."""
     def walk(node):
         if isinstance(node, dict):
-            field_name = node.get("field") or node.get("name")
+            field_name = node.get("field") or node.get("fieldName") or node.get("name") or node.get("key")
             field_value = node.get("value")
             if isinstance(field_name, str) and isinstance(field_value, (str, int, float, bool)):
                 yield field_name, field_value
@@ -60,8 +61,17 @@ def iter_custom_fields(payload):
         elif isinstance(node, list):
             for item in node:
                 yield from walk(item)
+        elif isinstance(node, str) and node.lstrip().startswith(("{", "[")):
+            try:
+                yield from walk(json.loads(node))
+            except json.JSONDecodeError:
+                return
 
     yield from walk(payload)
+
+
+def custom_field_names(payload):
+    return sorted({field_name for field_name, _ in iter_custom_fields(payload)})
 
 
 def extract_form_values(payload, field_names):
@@ -168,10 +178,12 @@ def main():
     )
     bundle_names = extract_scan_map_forms(custom_fields)
     if not bundle_names:
+        field_names = custom_field_names(custom_fields)
+        reported_names = ", ".join(field_names[:50]) or "none"
         parser.error(
             "No scanMapBundle_<name> marker fields were found in the Custom Fields "
             "API response. Add a hidden field named scanMapBundle_<bundle> (default "
-            "value true) to each scan-map-<bundle> form."
+            f"value true) to each scan-map-<bundle> form. Returned field names: {reported_names}"
         )
     form_values = extract_form_values(custom_fields, mappings)
 
