@@ -4,7 +4,7 @@
     "description": "Creates one bundle for each active scan-map-<bundle> form, copying each mapped scan's full NIFTI resource into the bundle.",
     "version": "1.0",
     "schema-version": "1.0",
-    "image": "ghcr.io/lavlabinfrastructure/xnat-scan-mapper:0.11.0",
+    "image": "ghcr.io/lavlabinfrastructure/xnat-scan-mapper:0.12.0",
     "type": "docker",
     "command-line": "--session-dir /input --output-dir /output --session-id #SESSION_ID# --session-label #SESSION_LABEL# --map t1ScanNumber:T1 --map t1cScanNumber:T1C --map t2ScanNumber:T2 --map dwiScanNumber:DWI --map adcScanNumber:ADC",
     "environment-variables": {

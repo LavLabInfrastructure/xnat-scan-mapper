@@ -11,7 +11,7 @@ mappings, copies each mapped scan's complete `NIFTI` resource (including
 - `custom-form.json` — an example `scan-map-mapped_sessions` form. Its scan
    field keys include the bundle name, for example
    `scanMap_mapped_sessions_t2ScanNumber` (see below).
-- `src/map_and_zip.py` — runs inside the container. It:
+- `cmd/map-and-zip/main.go` — the dependency-free runtime implementation. It:
   1. Calls the documented XNAT Custom Fields API
      (`GET /xapi/custom-fields/experiments/{session}/fields`) using the
      `XNAT_HOST`/`XNAT_USER`/`XNAT_PASS` credentials the Container Service
@@ -42,7 +42,9 @@ mappings, copies each mapped scan's complete `NIFTI` resource (including
   mounts the session's files read-only, supplies the mapping rules, passes
   the session ID into the script, and uploads every produced zip back onto
   the session as a resource.
-- `Dockerfile` — `python:3.11-slim` + `requests`.
+- `src/map_and_zip.py` — retained as a readable Python reference implementation;
+   it is not included in the runtime image.
+- `Dockerfile` — multi-stage Go build with a distroless runtime image.
 
 ## Configure a different form
 
@@ -91,6 +93,9 @@ session.
 cd /Users/mjbarrett/Code/xnat-scan-mapper
 docker build -t xnat-scan-mapper:1.0 .
 ```
+
+The runtime image contains only the statically linked Go binary and its
+certificate bundle; it has no Python interpreter, pip packages, or shell.
 
 Push it somewhere your XNAT Docker server/host can pull from (or load it
 directly on the same Docker host XNAT uses), then in XNAT:

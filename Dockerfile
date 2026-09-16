@@ -1,8 +1,12 @@
-FROM python:3.11-slim
+FROM golang:1.23-bookworm AS build
 
-RUN pip install --no-cache-dir requests
+WORKDIR /src
+COPY go.mod ./
+COPY cmd ./cmd
+RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /map-and-zip ./cmd/map-and-zip
 
-COPY src/map_and_zip.py /opt/map_and_zip.py
-RUN chmod +x /opt/map_and_zip.py
+FROM gcr.io/distroless/static-debian12
 
-ENTRYPOINT ["python3", "/opt/map_and_zip.py"]
+COPY --from=build /map-and-zip /map-and-zip
+
+ENTRYPOINT ["/map-and-zip"]
