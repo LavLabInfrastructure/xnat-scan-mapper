@@ -45,22 +45,32 @@ BUNDLE_MARKER_PREFIX = "scanMapBundle_"
 TRUTHY_VALUES = {"true", "1", "yes"}
 
 
-def extract_form_values(payload, field_names):
-    """Collect configured custom-form fields wherever XNAT returns them."""
-    values = {}
-
+def iter_custom_fields(payload):
+    """Yield custom field name/value pairs from flat or record-based XNAT JSON."""
     def walk(node):
         if isinstance(node, dict):
+            field_name = node.get("field") or node.get("name")
+            field_value = node.get("value")
+            if isinstance(field_name, str) and isinstance(field_value, (str, int, float, bool)):
+                yield field_name, field_value
             for key, value in node.items():
-                if key in field_names and isinstance(value, (str, int, float)):
-                    values[key] = str(value)
-                walk(value)
+                if key not in {"field", "name", "value"} and isinstance(value, (str, int, float, bool)):
+                    yield key, value
+                yield from walk(value)
         elif isinstance(node, list):
             for item in node:
-                walk(item)
+                yield from walk(item)
 
-    walk(payload)
-    return values
+    yield from walk(payload)
+
+
+def extract_form_values(payload, field_names):
+    """Collect configured custom-form fields wherever XNAT returns them."""
+    return {
+        field_name: str(field_value)
+        for field_name, field_value in iter_custom_fields(payload)
+        if field_name in field_names
+    }
 
 
 def extract_scan_map_forms(payload):
@@ -70,20 +80,13 @@ def extract_scan_map_forms(payload):
     field named scanMapBundle_<bundle> set to true when saved."""
     bundle_names = []
 
-    def walk(node):
-        if isinstance(node, dict):
-            for key, value in node.items():
-                if isinstance(key, str) and key.startswith(BUNDLE_MARKER_PREFIX):
-                    bundle_name = key[len(BUNDLE_MARKER_PREFIX):]
-                    is_truthy = value is True or str(value).strip().lower() in TRUTHY_VALUES
-                    if bundle_name and "/" not in bundle_name and "\\" not in bundle_name and is_truthy:
-                        bundle_names.append(bundle_name)
-                walk(value)
-        elif isinstance(node, list):
-            for item in node:
-                walk(item)
-
-    walk(payload)
+    for field_name, field_value in iter_custom_fields(payload):
+        if not field_name.startswith(BUNDLE_MARKER_PREFIX):
+            continue
+        bundle_name = field_name[len(BUNDLE_MARKER_PREFIX):]
+        is_truthy = field_value is True or str(field_value).strip().lower() in TRUTHY_VALUES
+        if bundle_name and "/" not in bundle_name and "\\" not in bundle_name and is_truthy:
+            bundle_names.append(bundle_name)
     return list(dict.fromkeys(bundle_names))
 
 
