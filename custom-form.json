@@ -1,0 +1,52 @@
+{
+  "title": "scan-map-mapped_sessions",
+  "display": "form",
+  "settings": {},
+  "components": [
+    {
+      "key": "t1ScanNumber",
+      "type": "textfield",
+      "input": true,
+      "label": "T1 Scan Number",
+      "tableView": true,
+      "placeholder": "-1",
+      "autocomplete": "off"
+    },
+    {
+      "key": "t1cScanNumber",
+      "type": "textfield",
+      "input": true,
+      "label": "T1C Scan Number",
+      "tableView": true,
+      "placeholder": "-1",
+      "autocomplete": "off"
+    },
+    {
+      "key": "t2ScanNumber",
+      "type": "textfield",
+      "input": true,
+      "label": "T2 Scan Number",
+      "tableView": true,
+      "placeholder": "-1",
+      "autocomplete": "off"
+    },
+    {
+      "key": "dwiScanNumber",
+      "type": "textfield",
+      "input": true,
+      "label": "DWI Scan Number",
+      "tableView": true,
+      "placeholder": "-1",
+      "autocomplete": "off"
+    },
+    {
+      "key": "adcScanNumber",
+      "type": "textfield",
+      "input": true,
+      "label": "ADC Scan Number",
+      "tableView": true,
+      "placeholder": "-1",
+      "autocomplete": "off"
+    }
+  ]
+}

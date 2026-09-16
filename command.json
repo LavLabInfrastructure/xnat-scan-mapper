@@ -1,0 +1,77 @@
+{
+    "name": "map-and-zip-session-scans",
+    "label": "Map and Zip Session Scans",
+    "description": "Creates one bundle for each scan-map-<bundle> custom form, copying each mapped scan's full NIFTI resource into the bundle.",
+    "version": "1.0",
+    "schema-version": "1.0",
+    "image": "xnat-scan-mapper:1.0",
+    "type": "docker",
+    "command-line": "--session-dir /input --output-dir /output --session-id #SESSION_ID# --map t1ScanNumber:T1 --map t1cScanNumber:T1C --map t2ScanNumber:T2 --map dwiScanNumber:DWI --map adcScanNumber:ADC",
+    "override-entrypoint": false,
+    "mounts": [
+        {
+            "name": "input",
+            "writable": false,
+            "path": "/input"
+        },
+        {
+            "name": "output",
+            "writable": true,
+            "path": "/output"
+        }
+    ],
+    "inputs": [
+        {
+            "name": "SESSION_ID",
+            "type": "string",
+            "required": true,
+            "description": "XNAT experiment ID of the session being processed"
+        }
+    ],
+    "outputs": [
+        {
+            "name": "mapped-sessions-zip",
+            "description": "Zip bundle containing full mapped NIFTI resources",
+            "mount": "output",
+            "path": "*.zip",
+            "glob": "*.zip"
+        }
+    ],
+    "xnat": [
+        {
+            "name": "map-and-zip-session-scans-wrapper",
+            "label": "Map and Zip Session Scans",
+            "description": "Runs automatically when a session form is saved; only forms named scan-map-<bundle> produce an output.",
+            "contexts": [
+                "xnat:imageSessionData"
+            ],
+            "external-inputs": [
+                {
+                    "name": "session",
+                    "type": "Session",
+                    "required": true,
+                    "provides-files-for-command-mount": "input"
+                }
+            ],
+            "derived-inputs": [
+                {
+                    "name": "session-id",
+                    "type": "string",
+                    "derived-from-wrapper-input": "session",
+                    "derived-from-xnat-object-property": "id",
+                    "provides-value-for-command-input": "SESSION_ID",
+                    "required": true
+                }
+            ],
+            "output-handlers": [
+                {
+                    "name": "mapped-sessions-zip-handler",
+                    "accepts-command-output": "mapped-sessions-zip",
+                    "as-a-child-of": "session",
+                    "type": "Resource",
+                    "label": "mapped_sessions"
+                }
+            ]
+        }
+    ]
+}
