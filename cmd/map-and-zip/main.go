@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -12,11 +13,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
 
 const scanMapFieldPrefix = "scanMap_"
+const manifestFilename = ".xnat-scan-mapper.sha256"
 
 var unsafeFilenameChars = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
@@ -233,15 +236,95 @@ func copyResource(resourceDir, destinationDir, label string) (int, error) {
 	return count, err
 }
 
-func zipDirectory(sourceDir, zipPath string) error {
+func bundleFingerprint(sessionDir string, formValues, mapping map[string]string) (string, error) {
+	hash := sha256.New()
+	mappingKeys := sortedKeys(mapping)
+	for _, formKey := range mappingKeys {
+		destination := mapping[formKey]
+		scanNumber := strings.TrimSpace(formValues[formKey])
+		fmt.Fprintf(hash, "mapping\x00%s\x00%s\x00%s\n", formKey, destination, scanNumber)
+		if scanNumber == "" || scanNumber == "-1" {
+			continue
+		}
+		resourceDir, err := findNiftiResource(filepath.Join(sessionDir, "SCANS", scanNumber))
+		if err != nil {
+			return "", err
+		}
+		if resourceDir == "" {
+			fmt.Fprintf(hash, "missing\x00%s\n", scanNumber)
+			continue
+		}
+		err = filepath.WalkDir(resourceDir, func(path string, entry os.DirEntry, err error) error {
+			if err != nil || entry.IsDir() {
+				return err
+			}
+			relativePath, err := filepath.Rel(resourceDir, path)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(hash, "file\x00%s\x00", filepath.ToSlash(relativePath))
+			file, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+			_, err = io.Copy(hash, file)
+			fmt.Fprint(hash, "\n")
+			return err
+		})
+		if err != nil {
+			return "", err
+		}
+	}
+	return fmt.Sprintf("%x", hash.Sum(nil)), nil
+}
+
+func existingBundleFingerprint(sessionDir, archiveName string) (string, bool, error) {
+	var fingerprint string
+	err := filepath.WalkDir(sessionDir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || entry.Name() != archiveName {
+			return nil
+		}
+		archive, err := zip.OpenReader(path)
+		if err != nil {
+			return nil
+		}
+		defer archive.Close()
+		for _, file := range archive.File {
+			if file.Name != manifestFilename {
+				continue
+			}
+			content, err := file.Open()
+			if err != nil {
+				return err
+			}
+			bytes, err := io.ReadAll(content)
+			content.Close()
+			if err != nil {
+				return err
+			}
+			fingerprint = strings.TrimSpace(string(bytes))
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if err != nil {
+		return "", false, err
+	}
+	return fingerprint, fingerprint != "", nil
+}
+
+func zipDirectory(sourceDir, zipPath, fingerprint string) error {
 	archive, err := os.Create(zipPath)
 	if err != nil {
 		return err
 	}
 	defer archive.Close()
 	writer := zip.NewWriter(archive)
-	defer writer.Close()
-	return filepath.WalkDir(sourceDir, func(path string, entry os.DirEntry, err error) error {
+	err = filepath.WalkDir(sourceDir, func(path string, entry os.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
 			return err
 		}
@@ -261,6 +344,29 @@ func zipDirectory(sourceDir, zipPath string) error {
 		_, err = io.Copy(entryWriter, file)
 		return err
 	})
+	if err != nil {
+		writer.Close()
+		return err
+	}
+	manifest, err := writer.Create(manifestFilename)
+	if err != nil {
+		writer.Close()
+		return err
+	}
+	if _, err := io.WriteString(manifest, fingerprint+"\n"); err != nil {
+		writer.Close()
+		return err
+	}
+	return writer.Close()
+}
+
+func sortedKeys(values map[string]string) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func main() {
@@ -304,6 +410,19 @@ func main() {
 		fatal(err)
 	}
 	for bundleName, formValues := range bundles {
+		zipFilename := safeSessionLabel + "_" + bundleName + ".zip"
+		fingerprint, err := bundleFingerprint(sessionDir, formValues, mapping)
+		if err != nil {
+			fatal(err)
+		}
+		existingFingerprint, found, err := existingBundleFingerprint(sessionDir, zipFilename)
+		if err != nil {
+			fatal(err)
+		}
+		if found && existingFingerprint == fingerprint {
+			fmt.Printf("Skipped %s; it is already up to date.\n", zipFilename)
+			continue
+		}
 		stagingDir := filepath.Join(outputDir, "_"+bundleName)
 		if err := os.RemoveAll(stagingDir); err != nil {
 			fatal(err)
@@ -336,8 +455,8 @@ func main() {
 			os.RemoveAll(stagingDir)
 			continue
 		}
-		zipPath := filepath.Join(outputDir, safeSessionLabel+"_"+bundleName+".zip")
-		if err := zipDirectory(stagingDir, zipPath); err != nil {
+		zipPath := filepath.Join(outputDir, zipFilename)
+		if err := zipDirectory(stagingDir, zipPath, fingerprint); err != nil {
 			fatal(err)
 		}
 		os.RemoveAll(stagingDir)

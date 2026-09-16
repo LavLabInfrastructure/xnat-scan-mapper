@@ -87,6 +87,20 @@ To support forms with different fields, add all their map rules to the same
 command; fields absent from the saved values are simply skipped for that
 session.
 
+## Idempotent runs
+
+The command may be launched repeatedly. Each zip contains a hidden
+`.xnat-scan-mapper.sha256` manifest calculated from the mapping fields and the
+contents of every selected source `NIFTI` resource. Before rebuilding a bundle,
+the mapper searches the session's existing resources for the same archive name
+and reads this manifest.
+
+An unchanged bundle is skipped without copying or re-zipping files. Adding,
+removing, renaming, or changing any source resource file, changing a mapped
+scan number, or changing a map destination changes the manifest and produces a
+replacement archive. This makes it safe to invoke the command from a broad
+session-update trigger or a scheduled reconciliation job.
+
 ## Build and register the image
 
 ```sh
@@ -120,28 +134,40 @@ directly on the same Docker host XNAT uses), then in XNAT:
 
 ## Wire it to "form filled in" (auto-run)
 
-The Container Service itself only launches on explicit REST calls or Event
-Service triggers — there's no built-in "custom form saved" launch button, so
-you need one Event Service automation per project (or site-wide):
+The Automation Service API does not register event listeners or upload scripts;
+it only manages the legacy internal-scripting setting. XNAT's Custom Fields API
+does not emit a configurable Event Service trigger on this installation, so a
+small XNAT-side listener is required for immediate runs when a form is edited.
 
-1. **Administer (or Project) > Automation > Event Trigger > New Automation**.
-2. **Event**: choose the session-update event XNAT fires when an experiment
-   (and its custom form) is saved — on most 1.8.x installs this is listed as
-   `SessionArchived`/`Session Data Changed`, or under the "Field(s) updated"
-   event for `xnat:imageSessionData` if you're on a version that exposes
-   custom-form saves as their own event. If your XNAT version doesn't expose
-   a form-specific event, use "Session Data Changed", which also fires for a
-   custom form save.
-3. **Command**: `Map and Zip Session Scans`.
-4. Leave the input blank / accept defaults — the wrapper only needs the
-   `session` context input, which the Event Service supplies automatically
-   from the event's subject.
-5. Save and enable the automation.
+`scripts/launch-mapper.sh` is the launch action for that listener. Given a
+session REST URI, it calls Container Service's project wrapper-launch endpoint.
+Configure these environment variables where the listener runs:
 
-Now saving a `scan-map-<bundle>` form triggers the command, which discovers
-all active bundles from their `scanMapBundle_<bundle>` marker fields, reads
+```text
+XNAT_HOST=https://xnat.example.org
+XNAT_USER=<service-account>
+XNAT_PASS=<service-account-password>
+XNAT_PROJECT=<project-id>
+XNAT_COMMAND_ID=<map-and-zip command ID>
+XNAT_WRAPPER_NAME=map-and-zip-session-scans-wrapper
+```
+
+Then invoke it with the edited session's URI:
+
+```sh
+SESSION_URI=/experiments/XNAT_E05657 scripts/launch-mapper.sh
+```
+
+The listener should run this script only after a session custom-field update
+whose field key starts with `scanMap_`. This filter prevents unrelated session
+edits from launching containers. The listener must be an XNAT plugin or a
+site-specific event bridge that subscribes to the internal custom-field update;
+the Automation Service REST API cannot supply that subscription itself.
+
 the just-saved values straight from XNAT, creates each `<bundle>.zip`, and
-attaches the results to the session's resources.
+The launched command discovers all saved `scanMap_<bundle>_<field-key>` values,
+creates each `<session-label>_<bundle>.zip`, and attaches the results to the
+session's resources.
 
 ## Notes / things to double check on your XNAT version
 

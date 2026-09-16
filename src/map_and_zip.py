@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Create a named zip from files in NIFTI resources selected by a scan-map form."""
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -11,6 +12,7 @@ import zipfile
 import requests
 
 UNSET_VALUES = {"", "-1", None}
+MANIFEST_FILENAME = ".xnat-scan-mapper.sha256"
 
 
 def parse_mappings(mapping_args):
@@ -165,13 +167,57 @@ def copy_resource(resource_dir, destination_dir, label):
     return copied_count
 
 
-def zip_directory(source_dir, zip_path):
+def bundle_fingerprint(session_dir, form_values, mappings):
+    """Hash the mapping and every selected NIFTI resource file."""
+    digest = hashlib.sha256()
+    for form_key in sorted(mappings):
+        destination = mappings[form_key]
+        scan_number = str(form_values.get(form_key, "")).strip()
+        digest.update(f"mapping\0{form_key}\0{destination}\0{scan_number}\n".encode())
+        if scan_number in UNSET_VALUES:
+            continue
+        resource_dir = find_nifti_resource(os.path.join(session_dir, "SCANS", scan_number))
+        if not resource_dir:
+            digest.update(f"missing\0{scan_number}\n".encode())
+            continue
+        for root, directories, files in os.walk(resource_dir):
+            directories.sort()
+            for filename in sorted(files):
+                source = os.path.join(root, filename)
+                if not os.path.isfile(source):
+                    continue
+                relative_path = os.path.relpath(source, resource_dir).replace(os.sep, "/")
+                digest.update(f"file\0{relative_path}\0".encode())
+                with open(source, "rb") as file_handle:
+                    for chunk in iter(lambda: file_handle.read(1024 * 1024), b""):
+                        digest.update(chunk)
+                digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def existing_bundle_fingerprint(session_dir, archive_name):
+    """Return the embedded manifest from an existing same-named session zip."""
+    for root, directories, files in os.walk(session_dir):
+        directories.sort()
+        if archive_name not in files:
+            continue
+        try:
+            with zipfile.ZipFile(os.path.join(root, archive_name)) as archive:
+                with archive.open(MANIFEST_FILENAME) as manifest:
+                    return manifest.read().decode().strip()
+        except (KeyError, OSError, UnicodeDecodeError, zipfile.BadZipFile):
+            continue
+    return None
+
+
+def zip_directory(source_dir, zip_path, fingerprint):
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
         for root, directories, files in os.walk(source_dir):
             directories.sort()
             for filename in sorted(files):
                 source = os.path.join(root, filename)
                 archive.write(source, os.path.relpath(source, source_dir))
+        archive.writestr(MANIFEST_FILENAME, f"{fingerprint}\n")
 
 
 def main():
@@ -212,6 +258,11 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     for bundle_name, form_values in forms.items():
+        zip_filename = f"{session_label}_{bundle_name}.zip"
+        fingerprint = bundle_fingerprint(args.session_dir, form_values, mappings)
+        if existing_bundle_fingerprint(args.session_dir, zip_filename) == fingerprint:
+            print(f"Skipped {zip_filename}; it is already up to date.")
+            continue
         staging_dir = os.path.join(args.output_dir, f"_{bundle_name}")
         shutil.rmtree(staging_dir, ignore_errors=True)
         os.makedirs(staging_dir)
@@ -236,8 +287,8 @@ def main():
             shutil.rmtree(staging_dir, ignore_errors=True)
             continue
 
-        zip_path = os.path.join(args.output_dir, f"{session_label}_{bundle_name}.zip")
-        zip_directory(staging_dir, zip_path)
+        zip_path = os.path.join(args.output_dir, zip_filename)
+        zip_directory(staging_dir, zip_path, fingerprint)
         shutil.rmtree(staging_dir, ignore_errors=True)
         print(f"Wrote {zip_path} with {copied_count} file(s).")
 
