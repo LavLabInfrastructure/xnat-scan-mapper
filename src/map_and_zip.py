@@ -179,6 +179,7 @@ def main():
     parser.add_argument("--session-dir", required=True, help="Mounted session input directory")
     parser.add_argument("--output-dir", required=True, help="Directory for the generated bundle")
     parser.add_argument("--session-id", required=True, help="XNAT experiment ID of the session")
+    parser.add_argument("--session-label", required=True, help="XNAT session label for archive names")
     parser.add_argument(
         "--map",
         action="append",
@@ -199,10 +200,7 @@ def main():
     custom_fields = fetch_json(
         xnat_host, f"xapi/custom-fields/experiments/{args.session_id}/fields", auth
     )
-    session_metadata = fetch_json(
-        xnat_host, f"data/experiments/{args.session_id}", auth, {"format": "json"}
-    )
-    session_label = extract_session_label(session_metadata, args.session_id)
+    session_label = extract_session_label({"label": args.session_label}, args.session_id)
     forms = extract_scan_map_forms(custom_fields, mappings)
     if not forms:
         field_names = ", ".join(custom_field_names(custom_fields)[:50]) or "none"

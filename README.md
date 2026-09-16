@@ -34,10 +34,10 @@ mappings, copies each mapped scan's complete `NIFTI` resource (including
      the legacy mapping behavior (for example, `image.nii.gz` becomes
      `T2.nii.gz` and `image.bval` becomes `T2.bval`); nested paths are
      retained unchanged.
-  5. Retrieves the XNAT session label and writes
+  5. Receives the XNAT session label directly from the wrapper and writes
      `/output/<session-label>_<bundle>.zip` for every active bundle, e.g.
-     `SUBJECT01_MR1_mapped_sessions.zip`. Unsafe label characters become
-     underscores; the session ID is used when a label is unavailable.
+     `101_MR_1_mapped_sessions.zip`. Unsafe label characters become
+     underscores.
 - `command.json` — the Container Service command/wrapper definition. It
   mounts the session's files read-only, supplies the mapping rules, passes
   the session ID into the script, and uploads every produced zip back onto
