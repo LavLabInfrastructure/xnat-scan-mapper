@@ -4,6 +4,12 @@
   "settings": {},
   "components": [
     {
+      "key": "scanMapBundle_mapped_sessions",
+      "type": "hidden",
+      "input": true,
+      "defaultValue": true
+    },
+    {
       "key": "t1ScanNumber",
       "type": "textfield",
       "input": true,
