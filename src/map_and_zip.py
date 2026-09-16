@@ -42,8 +42,7 @@ def fetch_json(xnat_host, path, auth, params=None):
     return response.json()
 
 
-BUNDLE_MARKER_PREFIX = "scanMapBundle_"
-TRUTHY_VALUES = {"true", "1", "yes"}
+SCAN_MAP_FIELD_PREFIX = "scanMap_"
 
 
 def iter_custom_fields(payload):
@@ -83,21 +82,21 @@ def extract_form_values(payload, field_names):
     }
 
 
-def extract_scan_map_forms(payload):
-    """Discover active scan-map bundle names from scanMapBundle_<name> marker
-    fields. The Custom Fields API returns a flat namespace with no per-form
-    grouping, so each scan-map-<bundle> form must include a hidden marker
-    field named scanMapBundle_<bundle> set to true when saved."""
-    bundle_names = []
-
+def extract_scan_map_forms(payload, mapping_keys):
+    """Group flat custom fields by scanMap_<bundle>_<field-key> names."""
+    bundles = {}
     for field_name, field_value in iter_custom_fields(payload):
-        if not field_name.startswith(BUNDLE_MARKER_PREFIX):
+        if not field_name.startswith(SCAN_MAP_FIELD_PREFIX):
             continue
-        bundle_name = field_name[len(BUNDLE_MARKER_PREFIX):]
-        is_truthy = field_value is True or str(field_value).strip().lower() in TRUTHY_VALUES
-        if bundle_name and "/" not in bundle_name and "\\" not in bundle_name and is_truthy:
-            bundle_names.append(bundle_name)
-    return list(dict.fromkeys(bundle_names))
+        for mapping_key in mapping_keys:
+            suffix = f"_{mapping_key}"
+            if not field_name.endswith(suffix):
+                continue
+            bundle_name = field_name[len(SCAN_MAP_FIELD_PREFIX):-len(suffix)]
+            if bundle_name and "/" not in bundle_name and "\\" not in bundle_name:
+                bundles.setdefault(bundle_name, {})[mapping_key] = str(field_value)
+            break
+    return bundles
 
 
 def find_nifti_resource(scan_dir):
@@ -176,19 +175,17 @@ def main():
     custom_fields = fetch_json(
         xnat_host, f"xapi/custom-fields/experiments/{args.session_id}/fields", auth
     )
-    bundle_names = extract_scan_map_forms(custom_fields)
-    if not bundle_names:
-        field_names = custom_field_names(custom_fields)
-        reported_names = ", ".join(field_names[:50]) or "none"
+    forms = extract_scan_map_forms(custom_fields, mappings)
+    if not forms:
+        field_names = ", ".join(custom_field_names(custom_fields)[:50]) or "none"
         parser.error(
-            "No scanMapBundle_<name> marker fields were found in the Custom Fields "
-            "API response. Add a hidden field named scanMapBundle_<bundle> (default "
-            f"value true) to each scan-map-<bundle> form. Returned field names: {reported_names}"
+            "No scanMap_<bundle>_<field-key> values were found in the Custom Fields "
+            "API response. Rename each scan field key to include its bundle name, for "
+            f"example scanMap_mapped_sessions_t2ScanNumber. Returned field names: {field_names}"
         )
-    form_values = extract_form_values(custom_fields, mappings)
 
     os.makedirs(args.output_dir, exist_ok=True)
-    for bundle_name in bundle_names:
+    for bundle_name, form_values in forms.items():
         staging_dir = os.path.join(args.output_dir, f"_{bundle_name}")
         shutil.rmtree(staging_dir, ignore_errors=True)
         os.makedirs(staging_dir)

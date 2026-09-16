@@ -4,15 +4,7 @@
   "settings": {},
   "components": [
     {
-      "key": "scanMapBundle_mapped_sessions",
-      "type": "hidden",
-      "input": true,
-      "defaultValue": true,
-      "persistent": true,
-      "clearOnHide": false
-    },
-    {
-      "key": "t1ScanNumber",
+      "key": "scanMap_mapped_sessions_t1ScanNumber",
       "type": "textfield",
       "input": true,
       "label": "T1 Scan Number",
@@ -21,7 +13,7 @@
       "autocomplete": "off"
     },
     {
-      "key": "t1cScanNumber",
+      "key": "scanMap_mapped_sessions_t1cScanNumber",
       "type": "textfield",
       "input": true,
       "label": "T1C Scan Number",
@@ -30,7 +22,7 @@
       "autocomplete": "off"
     },
     {
-      "key": "t2ScanNumber",
+      "key": "scanMap_mapped_sessions_t2ScanNumber",
       "type": "textfield",
       "input": true,
       "label": "T2 Scan Number",
@@ -39,7 +31,7 @@
       "autocomplete": "off"
     },
     {
-      "key": "dwiScanNumber",
+      "key": "scanMap_mapped_sessions_dwiScanNumber",
       "type": "textfield",
       "input": true,
       "label": "DWI Scan Number",
@@ -48,7 +40,7 @@
       "autocomplete": "off"
     },
     {
-      "key": "adcScanNumber",
+      "key": "scanMap_mapped_sessions_adcScanNumber",
       "type": "textfield",
       "input": true,
       "label": "ADC Scan Number",

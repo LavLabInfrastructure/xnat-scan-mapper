@@ -8,10 +8,9 @@ mappings, copies each mapped scan's complete `NIFTI` resource (including
 
 ## How it works
 
-- `custom-form.json` — an example `scan-map-mapped_sessions` form with
-  `t1ScanNumber`, `t1cScanNumber`, `t2ScanNumber`, `dwiScanNumber`, and
-   `adcScanNumber` fields (unset fields default to `-1`), plus a persistent
-   hidden `scanMapBundle_mapped_sessions` field (see below).
+- `custom-form.json` — an example `scan-map-mapped_sessions` form. Its scan
+   field keys include the bundle name, for example
+   `scanMap_mapped_sessions_t2ScanNumber` (see below).
 - `src/map_and_zip.py` — runs inside the container. It:
   1. Calls the documented XNAT Custom Fields API
      (`GET /xapi/custom-fields/experiments/{session}/fields`) using the
@@ -19,12 +18,11 @@ mappings, copies each mapped scan's complete `NIFTI` resource (including
      automatically injects. `XNAT_API_HOST`, when set, overrides the public
      `XNAT_HOST` with a container-network-reachable URL.
   2. This API returns a **flat** namespace of custom-field values with no
-     indication of which form they came from, so each `scan-map-<bundle>`
-   form must include a persistent hidden marker field named
-   `scanMapBundle_<bundle>` with a default value of `true`. The mapper scans
-   the flat response for every truthy `scanMapBundle_<bundle>` key to
-   discover which bundles are active — no manual bundle configuration
-   required.
+     indication of which form they came from. Each scan field therefore uses
+     the key format `scanMap_<bundle>_<field-key>`. The mapper finds every
+     persisted field with that format and derives the bundle name and mapping
+     field automatically — no hidden marker or manual bundle configuration is
+     required.
   3. Applies explicit, repeatable command-line rules:
      `--map formField:Destination`. The supplied command defines
      `t2ScanNumber:T2`, for example; `-1`/unset fields are skipped.
@@ -47,27 +45,32 @@ mappings, copies each mapped scan's complete `NIFTI` resource (including
 ## Configure a different form
 
 Give each form a title beginning with `scan-map-`; the remaining title text is
-The output bundle name. For example, `scan-map-brain-mri` creates
-`brain-mri.zip`. Add this component to that form's `components` array:
+the output bundle name. For example, `scan-map-brain-mri` creates
+`brain-mri.zip`.
+
+The Custom Fields API persists values in one flat namespace, so encode this
+bundle name into every scan field key. Use:
+
+```text
+scanMap_<bundle>_<field-key>
+```
+
+For the `scan-map-brain-mri` form, configure its T2 field as:
 
 ```json
 {
-   "key": "scanMapBundle_brain-mri",
-   "type": "hidden",
+   "key": "scanMap_brain-mri_t2ScanNumber",
+   "type": "textfield",
    "input": true,
-   "defaultValue": true,
-   "persistent": true,
-   "clearOnHide": false
+   "label": "T2 Scan Number",
+   "placeholder": "-1"
 }
 ```
 
-The bundle suffix in the title and marker key must match exactly. The marker is
-not displayed to the user, but it must be saved to XNAT; `persistent: true` and
-`clearOnHide: false` ensure that happens. After adding it to an existing form,
-open and save the form on a session once so XNAT stores the marker. This is how
-the mapper distinguishes forms because the Custom Fields API has no form-level
-grouping. Then add a matching `--map <field-key>:<destination>` option in
-`command.json` for each scan-number field used by the form family.
+The field-key suffix must equal the left side of an existing command mapping.
+With `--map t2ScanNumber:T2`, the example field maps its selected scan to the
+`T2` directory in `brain-mri.zip`. Every bundle is discovered from persisted
+scan field keys; no hidden marker or `--bundle` arguments are needed.
 
 The destination is a simple directory/base-name. Configure dcm2niix with
 `-f nifti` (typically `dcm2niix -z y -f nifti ...`); then
