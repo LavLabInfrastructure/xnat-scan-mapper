@@ -9,7 +9,6 @@ import zipfile
 import requests
 
 UNSET_VALUES = {"", "-1", None}
-FORM_PREFIX = "scan-map-"
 
 
 def parse_mappings(mapping_args):
@@ -42,29 +41,6 @@ def fetch_json(xnat_host, path, auth, params=None):
     return response.json()
 
 
-def fetch_session_json(xnat_host, session_id, auth):
-    return fetch_json(xnat_host, f"data/experiments/{session_id}", auth, {"format": "json"})
-
-
-def extract_scan_map_forms(payload):
-    """Find form schemas whose title begins with scan-map-."""
-    forms = []
-
-    def walk(node):
-        if isinstance(node, dict):
-            title = node.get("title")
-            if isinstance(title, str) and title.startswith(FORM_PREFIX) and title != FORM_PREFIX:
-                forms.append(title[len(FORM_PREFIX):])
-            for value in node.values():
-                walk(value)
-        elif isinstance(node, list):
-            for item in node:
-                walk(item)
-
-    walk(payload)
-    return list(dict.fromkeys(forms))
-
-
 def extract_form_values(payload, field_names):
     """Collect configured custom-form fields wherever XNAT returns them."""
     values = {}
@@ -81,6 +57,25 @@ def extract_form_values(payload, field_names):
 
     walk(payload)
     return values
+
+
+def extract_scan_map_forms(payload):
+    """Discover scan-map form records and their saved values from API data."""
+    forms = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            title = node.get("title") or node.get("name")
+            if isinstance(title, str) and title.startswith("scan-map-") and title != "scan-map-":
+                forms.append((title[len("scan-map-"):], node))
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(payload)
+    return forms
 
 
 def find_nifti_resource(scan_dir):
@@ -140,11 +135,6 @@ def main():
     parser.add_argument("--output-dir", required=True, help="Directory for the generated bundle")
     parser.add_argument("--session-id", required=True, help="XNAT experiment ID of the session")
     parser.add_argument(
-        "--forms-api-path",
-        default=os.environ.get("XNAT_FORMS_API_PATH", "/xapi/custom-forms/forms"),
-        help="Custom Forms API path that lists form schemas",
-    )
-    parser.add_argument(
         "--map",
         action="append",
         required=True,
@@ -161,17 +151,19 @@ def main():
         parser.error("XNAT_API_HOST or XNAT_HOST, XNAT_USER, and XNAT_PASS must be injected by Container Service")
 
     auth = (xnat_user, xnat_pass)
-    forms = extract_scan_map_forms(fetch_json(xnat_host, args.forms_api_path, auth))
+    custom_fields = fetch_json(
+        xnat_host, f"xapi/custom-fields/experiments/{args.session_id}/fields", auth
+    )
+    forms = extract_scan_map_forms(custom_fields)
     if not forms:
-        print(
-            f"No form named {FORM_PREFIX}<bundle> was found via {args.forms_api_path!r}; nothing to do.",
-            file=sys.stderr,
+        parser.error(
+            "No scan-map-* forms were included in the Custom Fields API response. "
+            "This XNAT instance exposes flat custom-field values without their form titles."
         )
-        return
-    form_values = extract_form_values(fetch_session_json(xnat_host, args.session_id, auth), mappings)
 
     os.makedirs(args.output_dir, exist_ok=True)
-    for bundle_name in forms:
+    for bundle_name, form_record in forms:
+        form_values = extract_form_values(form_record, mappings)
         staging_dir = os.path.join(args.output_dir, f"_{bundle_name}")
         shutil.rmtree(staging_dir, ignore_errors=True)
         os.makedirs(staging_dir)
