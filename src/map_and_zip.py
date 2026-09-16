@@ -31,7 +31,13 @@ def parse_mappings(mapping_args):
 
 def fetch_session_json(xnat_host, session_id, auth):
     url = f"{xnat_host.rstrip('/')}/data/experiments/{session_id}"
-    response = requests.get(url, params={"format": "json"}, auth=auth, timeout=60)
+    try:
+        response = requests.get(url, params={"format": "json"}, auth=auth, timeout=60)
+    except requests.ConnectionError as error:
+        raise RuntimeError(
+            f"Cannot connect to XNAT at {xnat_host!r}. Set XNAT_API_HOST to an XNAT URL "
+            "resolvable from the Container Service Docker network."
+        ) from error
     response.raise_for_status()
     return response.json()
 
@@ -135,11 +141,11 @@ def main():
     args = parser.parse_args()
     mappings = parse_mappings(args.map)
 
-    xnat_host = os.environ.get("XNAT_HOST")
+    xnat_host = os.environ.get("XNAT_API_HOST") or os.environ.get("XNAT_HOST")
     xnat_user = os.environ.get("XNAT_USER")
     xnat_pass = os.environ.get("XNAT_PASS")
     if not all([xnat_host, xnat_user, xnat_pass]):
-        parser.error("XNAT_HOST, XNAT_USER, and XNAT_PASS must be injected by Container Service")
+        parser.error("XNAT_API_HOST or XNAT_HOST, XNAT_USER, and XNAT_PASS must be injected by Container Service")
 
     forms = extract_scan_map_forms(fetch_session_json(xnat_host, args.session_id, (xnat_user, xnat_pass)))
     if not forms:

@@ -14,9 +14,11 @@ session.
   fields default to `-1`.
 - `src/map_and_zip.py` — runs inside the container. It:
   1. Calls back into the XNAT REST API (`GET /data/experiments/{id}?format=json`)
-     using the `XNAT_HOST`/`XNAT_USER`/`XNAT_PASS` credentials the Container
-     Service automatically injects, and considers only forms whose `title`
-     begins with `scan-map-`. The suffix becomes the bundle name.
+   using the `XNAT_HOST`/`XNAT_USER`/`XNAT_PASS` credentials the Container
+   Service automatically injects. `XNAT_API_HOST`, when set, overrides the
+   public `XNAT_HOST` with a container-network-reachable URL. It considers
+   only forms whose `title` begins with `scan-map-`; the suffix becomes the
+   bundle name.
   2. Applies explicit, repeatable command-line rules:
      `--map formField:Destination`. The supplied command defines
      `t2ScanNumber:T2`, for example; `-1`/unset fields are skipped.
@@ -110,7 +112,12 @@ container, which reads the just-saved values straight from XNAT, builds
   version — check what's available in the Automation event dropdown and pick
   the closest session-level "updated"/"archived" event.
 - `XNAT_HOST`/`XNAT_USER`/`XNAT_PASS` are injected automatically by the
-  Container Service for REST callbacks; no extra command wiring is required.
+   Container Service for REST callbacks. If the public `XNAT_HOST` is not
+   resolvable inside containers, configure `XNAT_API_HOST` in the Docker Server
+   / Container Service environment to an internal URL that is, such as
+   `http://xnat:8080` when `xnat` is the Docker Compose service name. This is
+   deployment-specific; verify it from the Docker network rather than assuming
+   a particular hostname.
 - If your custom form fields aren't reflected in
   `/data/experiments/{id}?format=json`, adjust `fetch_custom_form_values()` in
   [src/map_and_zip.py](src/map_and_zip.py) to call the Forms plugin's
