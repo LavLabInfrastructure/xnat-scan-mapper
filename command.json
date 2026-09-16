@@ -4,11 +4,11 @@
     "description": "Creates one bundle for each scan-map-<bundle> custom form, copying each mapped scan's full NIFTI resource into the bundle.",
     "version": "1.0",
     "schema-version": "1.0",
-    "image": "ghcr.io/lavlabinfrastructure/xnat-scan-mapper:0.1.0",
+    "image": "ghcr.io/lavlabinfrastructure/xnat-scan-mapper:0.2.0",
     "type": "docker",
     "command-line": "--session-dir /input --output-dir /output --session-id #SESSION_ID# --map t1ScanNumber:T1 --map t1cScanNumber:T1C --map t2ScanNumber:T2 --map dwiScanNumber:DWI --map adcScanNumber:ADC",
     "environment-variables": {
-        "XNAT_API_HOST": "http://xnat-xnat-web.xnat-system.svc:8080"
+        "XNAT_API_HOST": "http://xnat-xnat-web.xnat-system.svc"
     },
     "override-entrypoint": false,
     "mounts": [

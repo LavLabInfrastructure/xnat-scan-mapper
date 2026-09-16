@@ -29,10 +29,10 @@ def parse_mappings(mapping_args):
     return mappings
 
 
-def fetch_session_json(xnat_host, session_id, auth):
-    url = f"{xnat_host.rstrip('/')}/data/experiments/{session_id}"
+def fetch_json(xnat_host, path, auth, params=None):
+    url = f"{xnat_host.rstrip('/')}/{path.lstrip('/')}"
     try:
-        response = requests.get(url, params={"format": "json"}, auth=auth, timeout=60)
+        response = requests.get(url, params=params, auth=auth, timeout=60)
     except requests.ConnectionError as error:
         raise RuntimeError(
             f"Cannot connect to XNAT at {xnat_host!r}. Set XNAT_API_HOST to an XNAT URL "
@@ -42,29 +42,19 @@ def fetch_session_json(xnat_host, session_id, auth):
     return response.json()
 
 
+def fetch_session_json(xnat_host, session_id, auth):
+    return fetch_json(xnat_host, f"data/experiments/{session_id}", auth, {"format": "json"})
+
+
 def extract_scan_map_forms(payload):
-    """Find custom-form objects whose title starts with scan-map-."""
+    """Find form schemas whose title begins with scan-map-."""
     forms = []
 
     def walk(node):
         if isinstance(node, dict):
             title = node.get("title")
-            if isinstance(title, str) and title.startswith(FORM_PREFIX):
-                values = {}
-
-                def collect_values(value_node):
-                    if isinstance(value_node, dict):
-                        for key, value in value_node.items():
-                            if isinstance(value, (str, int, float)):
-                                values[key] = str(value)
-                            else:
-                                collect_values(value)
-                    elif isinstance(value_node, list):
-                        for item in value_node:
-                            collect_values(item)
-
-                collect_values(node)
-                forms.append((title[len(FORM_PREFIX):], values))
+            if isinstance(title, str) and title.startswith(FORM_PREFIX) and title != FORM_PREFIX:
+                forms.append(title[len(FORM_PREFIX):])
             for value in node.values():
                 walk(value)
         elif isinstance(node, list):
@@ -72,7 +62,25 @@ def extract_scan_map_forms(payload):
                 walk(item)
 
     walk(payload)
-    return forms
+    return list(dict.fromkeys(forms))
+
+
+def extract_form_values(payload, field_names):
+    """Collect configured custom-form fields wherever XNAT returns them."""
+    values = {}
+
+    def walk(node):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in field_names and isinstance(value, (str, int, float)):
+                    values[key] = str(value)
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(payload)
+    return values
 
 
 def find_nifti_resource(scan_dir):
@@ -132,6 +140,11 @@ def main():
     parser.add_argument("--output-dir", required=True, help="Directory for the generated bundle")
     parser.add_argument("--session-id", required=True, help="XNAT experiment ID of the session")
     parser.add_argument(
+        "--forms-api-path",
+        default=os.environ.get("XNAT_FORMS_API_PATH", "/xapi/custom-forms/forms"),
+        help="Custom Forms API path that lists form schemas",
+    )
+    parser.add_argument(
         "--map",
         action="append",
         required=True,
@@ -147,16 +160,18 @@ def main():
     if not all([xnat_host, xnat_user, xnat_pass]):
         parser.error("XNAT_API_HOST or XNAT_HOST, XNAT_USER, and XNAT_PASS must be injected by Container Service")
 
-    forms = extract_scan_map_forms(fetch_session_json(xnat_host, args.session_id, (xnat_user, xnat_pass)))
+    auth = (xnat_user, xnat_pass)
+    forms = extract_scan_map_forms(fetch_json(xnat_host, args.forms_api_path, auth))
     if not forms:
-        print(f"No custom form named {FORM_PREFIX}<bundle> was found; nothing to do.", file=sys.stderr)
+        print(
+            f"No form named {FORM_PREFIX}<bundle> was found via {args.forms_api_path!r}; nothing to do.",
+            file=sys.stderr,
+        )
         return
+    form_values = extract_form_values(fetch_session_json(xnat_host, args.session_id, auth), mappings)
 
     os.makedirs(args.output_dir, exist_ok=True)
-    for bundle_name, form_values in forms:
-        if not bundle_name:
-            print(f"warning: ignoring form named exactly {FORM_PREFIX}", file=sys.stderr)
-            continue
+    for bundle_name in forms:
         staging_dir = os.path.join(args.output_dir, f"_{bundle_name}")
         shutil.rmtree(staging_dir, ignore_errors=True)
         os.makedirs(staging_dir)
@@ -177,7 +192,7 @@ def main():
             )
 
         if not copied_count:
-            print(f"warning: {bundle_name} had no mapped NIFTI files; no zip created", file=sys.stderr)
+            print(f"warning: scan-map-{bundle_name} had no mapped NIFTI files; no zip created", file=sys.stderr)
             shutil.rmtree(staging_dir, ignore_errors=True)
             continue
 

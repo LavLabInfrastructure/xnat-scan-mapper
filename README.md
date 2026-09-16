@@ -16,9 +16,11 @@ session.
   1. Calls back into the XNAT REST API (`GET /data/experiments/{id}?format=json`)
    using the `XNAT_HOST`/`XNAT_USER`/`XNAT_PASS` credentials the Container
    Service automatically injects. `XNAT_API_HOST`, when set, overrides the
-   public `XNAT_HOST` with a container-network-reachable URL. It considers
-   only forms whose `title` begins with `scan-map-`; the suffix becomes the
-   bundle name.
+   public `XNAT_HOST` with a container-network-reachable URL. The command's
+   Custom Forms API (`/xapi/custom-forms/forms` by default) lists every form
+   whose `title` begins with `scan-map-`; each suffix becomes a bundle name.
+   Set `XNAT_FORMS_API_PATH` or `--forms-api-path` when the plugin exposes a
+   different forms-list route.
   2. Applies explicit, repeatable command-line rules:
      `--map formField:Destination`. The supplied command defines
      `t2ScanNumber:T2`, for example; `-1`/unset fields are skipped.
@@ -38,20 +40,22 @@ session.
 
 ## Configure a different form
 
-Give a form a title beginning with `scan-map-`; the remaining title text is
+Give each form a title beginning with `scan-map-`; the remaining title text is
 the output bundle name. For example, `scan-map-brain-mri` creates
-`brain-mri.zip`. Add any fields you need for scan numbers, then add a matching
-`--map <field-key>:<destination>` option to `command.json`'s `command-line`.
+`brain-mri.zip`. Every matching form is processed during one command run.
+Add a matching `--map <field-key>:<destination>` option for each scan-number
+field used by the form family.
 The destination is a simple directory/base-name. Configure dcm2niix with
 `-f nifti` (typically `dcm2niix -z y -f nifti ...`); then
 `--map flairScan:FLAIR` changes `nifti.nii.gz`, `nifti.bval`, and any
 collision names such as `nifti_a.nii.gz` to `FLAIR/FLAIR.nii.gz`,
 `FLAIR/FLAIR.bval`, and `FLAIR/FLAIR_a.nii.gz` respectively.
 
-To support forms with different fields, add their `--map` rules to the same
-command: fields missing from a particular `scan-map-*` form are simply
-skipped. You may also register separate command JSON files with distinct map
-sets when you want each form family to use a stricter configuration.
+To support forms with different fields, add all their map rules to the same
+command; fields absent from a given form are skipped. The standard XNAT
+experiment endpoint returns saved field values but not Custom Forms schema
+titles, so the mapper separately queries the Custom Forms list endpoint to
+discover all bundles.
 - `Dockerfile` — `python:3.11-slim` + `requests`.
 
 ## Build and register the image
@@ -102,9 +106,9 @@ you need one Event Service automation per project (or site-wide):
    from the event's subject.
 5. Save and enable the automation.
 
-Now saving a `scan-map-<bundle>` custom form on a session triggers the
-container, which reads the just-saved values straight from XNAT, builds
-`<bundle>.zip`, and attaches it to the session's resources.
+Now saving any `scan-map-<bundle>` form triggers the command, which discovers
+all such forms, reads the just-saved field values straight from XNAT, creates
+each `<bundle>.zip`, and attaches the results to the session's resources.
 
 ## Notes / things to double check on your XNAT version
 
@@ -118,6 +122,9 @@ container, which reads the just-saved values straight from XNAT, builds
    `http://xnat:8080` when `xnat` is the Docker Compose service name. This is
    deployment-specific; verify it from the Docker network rather than assuming
    a particular hostname.
+- The default Custom Forms schema-list endpoint is `/xapi/custom-forms/forms`.
+   If your Custom Forms plugin uses another route, set `XNAT_FORMS_API_PATH` in
+   `environment-variables` in `command.json` to that path (not a full URL).
 - If your custom form fields aren't reflected in
   `/data/experiments/{id}?format=json`, adjust `fetch_custom_form_values()` in
   [src/map_and_zip.py](src/map_and_zip.py) to call the Forms plugin's
