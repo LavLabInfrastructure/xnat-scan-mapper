@@ -34,8 +34,10 @@ mappings, copies each mapped scan's complete `NIFTI` resource (including
      the legacy mapping behavior (for example, `image.nii.gz` becomes
      `T2.nii.gz` and `image.bval` becomes `T2.bval`); nested paths are
      retained unchanged.
-  5. Writes `/output/<bundle>.zip` for every active bundle, e.g.
-     `mapped_sessions.zip`.
+  5. Retrieves the XNAT session label and writes
+     `/output/<session-label>_<bundle>.zip` for every active bundle, e.g.
+     `SUBJECT01_MR1_mapped_sessions.zip`. Unsafe label characters become
+     underscores; the session ID is used when a label is unavailable.
 - `command.json` — the Container Service command/wrapper definition. It
   mounts the session's files read-only, supplies the mapping rules, passes
   the session ID into the script, and uploads every produced zip back onto
@@ -46,7 +48,7 @@ mappings, copies each mapped scan's complete `NIFTI` resource (including
 
 Give each form a title beginning with `scan-map-`; the remaining title text is
 the output bundle name. For example, `scan-map-brain-mri` creates
-`brain-mri.zip`.
+`<session-label>_brain-mri.zip`.
 
 The Custom Fields API persists values in one flat namespace, so encode this
 bundle name into every scan field key. Use:
@@ -69,8 +71,9 @@ For the `scan-map-brain-mri` form, configure its T2 field as:
 
 The field-key suffix must equal the left side of an existing command mapping.
 With `--map t2ScanNumber:T2`, the example field maps its selected scan to the
-`T2` directory in `brain-mri.zip`. Every bundle is discovered from persisted
-scan field keys; no hidden marker or `--bundle` arguments are needed.
+`T2` directory in `<session-label>_brain-mri.zip`. Every bundle is discovered
+from persisted scan field keys; no hidden marker or `--bundle` arguments are
+needed.
 
 The destination is a simple directory/base-name. Configure dcm2niix with
 `-f nifti` (typically `dcm2niix -z y -f nifti ...`); then

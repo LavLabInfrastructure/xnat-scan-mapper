@@ -33,11 +33,10 @@
     ],
     "outputs": [
         {
-            "name": "mapped-sessions-zip",
-            "description": "Zip bundle containing full mapped NIFTI resources",
+            "name": "mapped-session-bundles",
+            "description": "Directory containing all generated mapped-session zip bundles",
             "mount": "output",
-            "path": "*.zip",
-            "glob": "*.zip"
+            "path": "."
         }
     ],
     "xnat": [
@@ -69,7 +68,7 @@
             "output-handlers": [
                 {
                     "name": "mapped-sessions-zip-handler",
-                    "accepts-command-output": "mapped-sessions-zip",
+                    "accepts-command-output": "mapped-session-bundles",
                     "as-a-child-of": "session",
                     "type": "Resource",
                     "label": "mapped_sessions"

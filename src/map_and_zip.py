@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 import zipfile
@@ -40,6 +41,29 @@ def fetch_json(xnat_host, path, auth, params=None):
         ) from error
     response.raise_for_status()
     return response.json()
+
+
+def extract_session_label(payload, fallback):
+    """Extract the XNAT session label and make it safe for an archive name."""
+    label = None
+
+    def walk(node):
+        nonlocal label
+        if label is not None:
+            return
+        if isinstance(node, dict):
+            candidate = node.get("label")
+            if isinstance(candidate, str) and candidate.strip():
+                label = candidate
+                return
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(payload)
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", (label or fallback).strip()).strip("._") or fallback
 
 
 SCAN_MAP_FIELD_PREFIX = "scanMap_"
@@ -175,6 +199,10 @@ def main():
     custom_fields = fetch_json(
         xnat_host, f"xapi/custom-fields/experiments/{args.session_id}/fields", auth
     )
+    session_metadata = fetch_json(
+        xnat_host, f"data/experiments/{args.session_id}", auth, {"format": "json"}
+    )
+    session_label = extract_session_label(session_metadata, args.session_id)
     forms = extract_scan_map_forms(custom_fields, mappings)
     if not forms:
         field_names = ", ".join(custom_field_names(custom_fields)[:50]) or "none"
@@ -210,7 +238,7 @@ def main():
             shutil.rmtree(staging_dir, ignore_errors=True)
             continue
 
-        zip_path = os.path.join(args.output_dir, f"{bundle_name}.zip")
+        zip_path = os.path.join(args.output_dir, f"{session_label}_{bundle_name}.zip")
         zip_directory(staging_dir, zip_path)
         shutil.rmtree(staging_dir, ignore_errors=True)
         print(f"Wrote {zip_path} with {copied_count} file(s).")
