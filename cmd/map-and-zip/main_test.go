@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"os"
 	"path/filepath"
 	"testing"
@@ -56,6 +57,33 @@ func TestCopyResourceFlattensFilesAndExcludesXML(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(destinationDir, "metadata.xml")); !os.IsNotExist(err) {
 		t.Errorf("XML file was not excluded: %v", err)
+	}
+}
+
+func TestZipDirectoryKeepsFilesAtArchiveRoot(t *testing.T) {
+	sourceDir := t.TempDir()
+	for name, contents := range map[string]string{"T1.nii.gz": "t1", "T2.nii.gz": "t2"} {
+		if err := os.WriteFile(filepath.Join(sourceDir, name), []byte(contents), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	archivePath := filepath.Join(t.TempDir(), "bundle.zip")
+	if err := zipDirectory(sourceDir, archivePath, "fingerprint"); err != nil {
+		t.Fatal(err)
+	}
+	archive, err := zip.OpenReader(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer archive.Close()
+	entries := map[string]bool{}
+	for _, file := range archive.File {
+		entries[file.Name] = true
+	}
+	for _, name := range []string{"T1.nii.gz", "T2.nii.gz", manifestFilename} {
+		if !entries[name] {
+			t.Errorf("archive entry %q missing; got %v", name, entries)
+		}
 	}
 }
 

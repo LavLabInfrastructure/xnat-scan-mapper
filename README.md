@@ -75,8 +75,8 @@ For the `scan-map-brain-mri` form, configure its T2 field as:
 ```
 
 The field-key suffix must equal the left side of an existing command mapping.
-With `--map t2ScanNumber:T2`, the example field maps its selected scan to the
-`T2` directory in `<session-label>_brain-mri.zip`. Every bundle is discovered
+With `--map t2ScanNumber:T2`, the example field maps its selected scan to
+`T2`-prefixed filenames in the root of `<session-label>_brain-mri.zip`. Every bundle is discovered
 from persisted scan field keys; no hidden marker or `--bundle` arguments are
 needed.
 

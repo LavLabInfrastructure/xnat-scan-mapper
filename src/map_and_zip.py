@@ -279,9 +279,7 @@ def main():
             if not resource_dir:
                 print(f"warning: no NIFTI resource for scan {scan_number} ({form_key}); skipping", file=sys.stderr)
                 continue
-            copied_count += copy_resource(
-                resource_dir, os.path.join(staging_dir, destination), destination
-            )
+            copied_count += copy_resource(resource_dir, staging_dir, destination)
 
         if not copied_count:
             print(f"warning: scan-map-{bundle_name} had no mapped NIFTI files; no zip created", file=sys.stderr)

@@ -448,7 +448,7 @@ func main() {
 				fmt.Fprintf(os.Stderr, "warning: no NIFTI resource for scan %s (%s); skipping\n", scanNumber, formKey)
 				continue
 			}
-			count, err := copyResource(resource, filepath.Join(stagingDir, destination), destination)
+			count, err := copyResource(resource, stagingDir, destination)
 			if err != nil {
 				fatal(err)
 			}
