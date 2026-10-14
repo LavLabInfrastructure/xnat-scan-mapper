@@ -147,19 +147,20 @@ def mapped_filename(filename, label):
 
 
 def copy_resource(resource_dir, destination_dir, label):
-    """Copy all NIFTI-resource files, using mapped names for root files."""
+    """Copy all NIFTI-resource files into the mapped destination directory."""
     copied_count = 0
     for root, directories, files in os.walk(resource_dir):
         directories.sort()
         relative_dir = os.path.relpath(root, resource_dir)
-        target_dir = destination_dir if relative_dir == "." else os.path.join(destination_dir, relative_dir)
-        os.makedirs(target_dir, exist_ok=True)
+        os.makedirs(destination_dir, exist_ok=True)
         for filename in sorted(files):
+            if os.path.splitext(filename)[1].lower() == ".xml":
+                continue
             source = os.path.join(root, filename)
             if not os.path.isfile(source):
                 continue
             target_filename = mapped_filename(filename, label) if relative_dir == "." else filename
-            target = os.path.join(target_dir, target_filename)
+            target = os.path.join(destination_dir, target_filename)
             if os.path.exists(target):
                 raise ValueError(f"multiple files map to {target}")
             shutil.copyfile(source, target)

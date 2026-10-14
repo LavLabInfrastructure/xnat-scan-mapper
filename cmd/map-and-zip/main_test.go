@@ -23,6 +23,42 @@ func TestCustomFieldsSupportsFlatAndRecordResponses(t *testing.T) {
 	}
 }
 
+func TestCopyResourceFlattensFilesAndExcludesXML(t *testing.T) {
+	resourceDir := t.TempDir()
+	files := map[string]string{
+		"nifti.nii.gz":           "root nifti",
+		"metadata.xml":           "<metadata/>",
+		"nested/sidecar.json":    "{}",
+		"nested/deeper/data.bin": "data",
+	}
+	for relativePath, contents := range files {
+		path := filepath.Join(resourceDir, relativePath)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	destinationDir := filepath.Join(t.TempDir(), "bundle")
+	count, err := copyResource(resourceDir, destinationDir, "T2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 3 {
+		t.Fatalf("copied %d files, want 3", count)
+	}
+	for _, name := range []string{"T2.nii.gz", "sidecar.json", "data.bin"} {
+		if _, err := os.Stat(filepath.Join(destinationDir, name)); err != nil {
+			t.Errorf("expected flattened file %s: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(destinationDir, "metadata.xml")); !os.IsNotExist(err) {
+		t.Errorf("XML file was not excluded: %v", err)
+	}
+}
+
 func TestMappedFilename(t *testing.T) {
 	tests := map[string]string{
 		"nifti_a.nii.gz": "DWI_a.nii.gz",

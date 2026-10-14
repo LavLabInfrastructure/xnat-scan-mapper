@@ -3,8 +3,9 @@
 Container Service command that processes every active `scan-map-<bundle>`
 custom form on a session. It reads explicitly configured scan-number
 mappings, copies each mapped scan's complete `NIFTI` resource (including
-`.bval`, `.bvec`, JSON sidecars, and nested files), and attaches
-`<bundle>.zip` to the session for each active bundle.
+`.bval`, `.bvec`, JSON sidecars, and nested files) into a flat directory with
+no scan subfolders, and attaches `<bundle>.zip` to the session for each active
+bundle. XML files are excluded.
 
 ## How it works
 
@@ -27,13 +28,15 @@ mappings, copies each mapped scan's complete `NIFTI` resource (including
      `--map formField:Destination`. The supplied command defines
      `t2ScanNumber:T2`, for example; `-1`/unset fields are skipped.
   4. For each selected scan, copies every file under
-     `SCANS/<scan>/.../NIFTI/`. Root resource files whose name begins with
-     `nifti` have only that prefix replaced by the map destination, so
-     `nifti_a.nii.gz`, `nifti_b.nii.gz`, and `nifti.bval` become
-     `T2/T2_a.nii.gz`, `T2/T2_b.nii.gz`, and `T2/T2.bval`. Other root files use
-     the legacy mapping behavior (for example, `image.nii.gz` becomes
-     `T2.nii.gz` and `image.bval` becomes `T2.bval`); nested paths are
-     retained unchanged.
+     `SCANS/<scan>/.../NIFTI/`. XML files are excluded. All remaining files
+     are written directly into the bundle root; nested resource paths are
+     flattened. Root resource files whose name begins with `nifti` have only
+     that prefix replaced by the map destination, so `nifti_a.nii.gz`,
+     `nifti_b.nii.gz`, and `nifti.bval` become `T2_a.nii.gz`,
+     `T2_b.nii.gz`, and `T2.bval`. Other root files use the legacy mapping
+     behavior (for example, `image.nii.gz` becomes `T2.nii.gz` and
+     `image.bval` becomes `T2.bval`). Duplicate flattened filenames cause an
+     error rather than overwriting files.
   5. Receives the XNAT session label directly from the wrapper and writes
      `/output/<session-label>_<bundle>.zip` for every active bundle, e.g.
      `101_MR_1_mapped_sessions.zip`. Unsafe label characters become

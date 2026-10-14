@@ -200,14 +200,18 @@ func copyResource(resourceDir, destinationDir, label string) (int, error) {
 		if entry.IsDir() {
 			return nil
 		}
+		if strings.EqualFold(filepath.Ext(entry.Name()), ".xml") {
+			return nil
+		}
 		relativePath, err := filepath.Rel(resourceDir, path)
 		if err != nil {
 			return err
 		}
-		targetPath := filepath.Join(destinationDir, relativePath)
+		filename := filepath.Base(path)
 		if filepath.Dir(relativePath) == "." {
-			targetPath = filepath.Join(destinationDir, mappedFilename(entry.Name(), label))
+			filename = mappedFilename(filename, label)
 		}
+		targetPath := filepath.Join(destinationDir, filename)
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 			return err
 		}
